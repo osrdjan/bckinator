@@ -56,7 +56,7 @@
          <StackPanel Margin="0,0,12,0"><TextBlock Text="Threads"/><TextBox Text="{Binding Draft.Compression.Threads, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" Padding="8"/></StackPanel>
         </UniformGrid>
        </Expander>
-       <TextBlock Text="Large dictionaries and many threads can use substantial RAM. Staging needs space for a full copy plus the archive." TextWrapping="Wrap" FontSize="12" Opacity="0.65" Margin="0,10,0,10"/>
+       <TextBlock Text="Archives read files directly from the source without a staging copy. Large dictionaries and many threads can use substantial RAM." TextWrapping="Wrap" FontSize="12" Opacity="0.65" Margin="0,10,0,10"/>
        <CheckBox Content="Exclude symbolic links and junctions (recommended)" IsChecked="{Binding Draft.ExcludeLinks}" Margin="0,5"/>
        <TextBlock Text="When disabled, only targets inside the source are followed. Cycles and external targets are skipped and reported." Opacity="0.65" FontSize="12" TextWrapping="Wrap" Margin="22,0,0,6"/>
        <CheckBox Content="Continue with warnings when a file cannot be read or copied" IsChecked="{Binding Draft.ContinueOnErrors}" Margin="0,5"/>
@@ -105,8 +105,8 @@
       <DataGrid x:Name="HistoryGrid" ItemsSource="{Binding History}" SelectedItem="{Binding SelectedRun}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" EnableRowVirtualization="True">
        <DataGrid.Columns><DataGridTextColumn Header="Started" Binding="{Binding StartedAt, StringFormat='yyyy-MM-dd HH:mm:ss zzz'}" Width="180"/><DataGridTextColumn Header="Profile" Binding="{Binding ProfileName}" Width="*"/><DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="155"/><DataGridTextColumn Header="Duration" Binding="{Binding DurationDisplay}" Width="90"/><DataGridTextColumn Header="Bytes" Binding="{Binding OutputBytes, StringFormat=N0}" Width="85"/></DataGrid.Columns>
       </DataGrid>
-      <StackPanel Grid.Row="1" Margin="0,12,0,12"><TextBlock Text="{Binding SelectedRun.OutputPath}" TextWrapping="Wrap"/><TextBlock Text="{Binding SelectedRun.Message}" Opacity="0.7" TextWrapping="Wrap" Margin="0,4,0,0"/><TextBlock Text="{Binding SelectedRun.RetainedStagingPath, StringFormat='Retained staging: {0}'}" TextWrapping="Wrap" Opacity="0.7" Margin="0,4,0,0"/></StackPanel>
-      <WrapPanel Grid.Row="2"><Button Content="Open output location" Command="{Binding OpenOutput}" Style="{StaticResource ActionButton}"/><Button Content="Locate run log" Command="{Binding OpenLog}" Style="{StaticResource ActionButton}"/><Button Content="Open retained staging" Command="{Binding OpenStaging}" Style="{StaticResource ActionButton}"/></WrapPanel>
+      <StackPanel Grid.Row="1" Margin="0,12,0,12"><TextBlock Text="{Binding SelectedRun.OutputPath}" TextWrapping="Wrap"/><TextBlock Text="{Binding SelectedRun.Message}" Opacity="0.7" TextWrapping="Wrap" Margin="0,4,0,0"/><TextBlock Text="{Binding SelectedRun.RetainedStagingPath, StringFormat='Retained work files: {0}'}" TextWrapping="Wrap" Opacity="0.7" Margin="0,4,0,0"/></StackPanel>
+      <WrapPanel Grid.Row="2"><Button Content="Open output location" Command="{Binding OpenOutput}" Style="{StaticResource ActionButton}"/><Button Content="Locate run log" Command="{Binding OpenLog}" Style="{StaticResource ActionButton}"/><Button Content="Open work files" Command="{Binding OpenStaging}" Style="{StaticResource ActionButton}"/></WrapPanel>
      </Grid>
     </TabItem>
     <TabItem Header="Settings">

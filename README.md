@@ -29,7 +29,7 @@ Run `artifacts/publish/win-x64/Bckinator.App.exe`. Keep the publish folder toget
 3. Configure global rules and directory-specific include-only scopes. Select a scope row to edit its included paths, one per line. Directory literals such as `diagrams/` include their eligible descendants.
 4. Save the profile. Edits are explicit; the application asks before discarding unsaved changes. Start and Preview use the currently displayed settings, including unsaved edits, through an isolated snapshot.
 5. Use Preview to inspect relative paths, inclusion decisions, reasons, included file count, and uncompressed size. Filter by decision, path, or reason. Changing settings clears the old preview. Excluded directory trees are represented by their directory row and are not traversed; this avoids unnecessary access and expensive enumeration.
-6. Start Backup. One preview or backup runs at a time. Controls that could change a running operation are disabled; Cancel remains available. History includes output paths, status, duration, size, messages, and links to logs and retained staging.
+6. Start Backup. One preview or backup runs at a time. Controls that could change a running operation are disabled; Cancel remains available. History includes output paths, status, duration, size, messages, and links to logs and retained work files.
 
 ## Selection semantics
 
@@ -50,15 +50,22 @@ Symbolic links and junctions are excluded by default. If this is unchecked, only
 
 ## Execution and recovery
 
-Each run is an independent full backup. The source is opened for reading and is never written or deleted. Selected files are copied into a unique `.bckinator-staging-<run-id>` directory under the destination. Ordinary file and directory modification timestamps are preserved where practical. Empty eligible directories are preserved when at least one eligible file exists.
+Each run is an independent full backup. Source file contents are opened for reading and are never written or deleted. There are two execution paths:
 
-Copied files are verified with SHA-256. A 7z backup then compresses that staged root and runs `7z t`; any nonzero 7-Zip exit code prevents final publication. The archive uses a unique `.partial.7z` name until verification succeeds. Folder backups are renamed from their verified staging root. Existing outputs and manifest sidecars are never overwritten.
+- **7-Zip archives:** selected files are hashed during preflight, then the installed `7z.exe` compresses an explicit literal file list directly from the source. No uncompressed payload copy is written. A `.bckinator-work-<run-id>` directory contains only file lists and manifest metadata. A temporary directory symlink or junction gives the source the generated archive root name without copying file data. The alias is detached on success, failure, or cancellation and is never recursively deleted. Source link restrictions continue to apply to actual source paths.
+- **Folder backups:** selected files are copied into `.bckinator-staging-<run-id>` under the destination, verified with SHA-256, and renamed to their final output folder. This temporary name prevents partially copied folders from looking complete.
 
-Successful runs produce a `<output>.manifest.json` sidecar with file sizes, modification timestamps, SHA-256 hashes, and warnings. A successful manifest move is followed by cleanup of only that run's staging directory. Cleanup failures appear as warnings. Failures and cancellations retain staging and partial archives for inspection; **History → Open retained staging** locates them. After inspecting them, remove unwanted data yourself. Partial archives are not complete backups.
+When a source alias is unavailable (for example, some network sources without symbolic-link privileges), direct compression still runs from the source. The application then prefixes the archived paths with the generated root by renaming entries. **This fallback rewrites the compressed archive once**, requires space for that extra compressed copy, and is explicitly logged. Local NTFS sources normally use a junction without administrator privileges and avoid this rewrite. No fallback stages uncompressed source data.
 
-The default error policy fails the run. Opting into **Continue with warnings** allows unreadable or uncopyable items to be skipped; a successful result is then **CompletedWithWarnings**, and skipped items are listed in the log and manifest. Source files changed between scanning and copying are treated as errors. An empty selection, or a run with no successfully copied files, is rejected.
+Archives keep a unique `.partial.7z` name while being built. Verification checks the exact archived file and empty-directory selection, runs `7z t`, and extracts file contents through a memory pipe to compare their SHA-256 hashes against preflight hashes. No verification extraction is written to disk. Any missing, extra, changed, or corrupt content prevents publication. Existing outputs and manifest sidecars are never overwritten.
 
-Disk-space checks conservatively allow the uncompressed total plus an archive of that size, with a small overhead allowance. They are estimates, not reservations; UNC free space is not prechecked, and writes can still fail if capacity changes. Failed writes retain the staging data.
+Empty eligible directory leaves are included explicitly, with their children excluded so newly created files cannot be pulled in by recursive directory processing. Nonempty archive parent folders are represented by their file paths; file modification timestamps are preserved, while implicit parent-folder timestamps may be recreated during extraction. Folder backups also preserve ordinary directory modification timestamps where practical. An empty file selection is rejected.
+
+Successful runs produce a `<output>.manifest.json` sidecar with sizes, timestamps, SHA-256 hashes matching the verified backup content, and warnings. Work files are cleaned only after verification and publication; cleanup refuses to follow links. Failed and cancelled archives retain metadata work files and any partial archive, rather than an uncompressed source copy. Failed folder runs retain their copied staging data. **History → Open work files** locates the retained directory. Partial archives are not complete backups. Old history records remain compatible; the JSON field `retainedStagingPath` now also represents archive metadata work directories.
+
+The default error policy fails the run. **Continue with warnings** can skip unreadable items during scanning or archive preflight, and failed copies for folder output. Successful partial selections are marked **CompletedWithWarnings**, and skipped items are recorded. Once direct compression starts, source changes, missing files, or any nonzero 7-Zip result fail the run instead of publishing an archive with unverifiable contents. There is no VSS snapshot; keep source files stable for the duration of the operation.
+
+Disk-space estimates for direct archives allow roughly the selected uncompressed size plus overhead for a worst-case compressed output, without reserving space for an additional uncompressed staging copy. The root-renaming fallback checks space for another compressed archive. These are estimates, not reservations; UNC free space is not prechecked, and writes can still fail if capacity changes. Tested with installed 7-Zip 26.05; direct mode requires support for literal file lists, `-spm`, and `-sse`.
 
 ## Application data and profile exchange
 
@@ -81,12 +88,12 @@ dotnet run --project src/Bckinator.App -- --data-dir D:\scratch\bckinator-config
 
 ## Architecture and validation
 
-- `Bckinator.Core`: profile models and storage, rule evaluation, scanning, naming, staging, verification, and 7-Zip process integration. It has no WPF dependency.
+- `Bckinator.Core`: profile models and storage, rule evaluation, scanning, naming, direct archive streaming, folder staging, verification, and 7-Zip process integration. It has no WPF dependency.
 - `Bckinator.App`: Workspace views, view model, commands, and native folder/file dialogs. Uses the built-in Fluent theme following system appearance.
-- `Bckinator.Tests`: rule, nesting, glob, serialization, naming, path-boundary, cancellation, locked-file, collision, folder, archive, and configuration tests. A WPF dispatcher test loads all tabs and exercises bound Save, Preview, and Start commands. The archive integration test requires 7-Zip at its default installed location.
+- `Bckinator.Tests`: rule, nesting, glob, serialization, naming, path-boundary, cancellation, locked-file, collision, folder, archive, and configuration tests. Direct archive tests cover metadata-only work files, alias cleanup, root-renaming fallback, exact selection, late-added directory contents, source mutation with unchanged size/timestamp, and streamed SHA-256 verification for solid and non-solid archives. A WPF dispatcher test loads all tabs and exercises bound Save, Preview, and Start commands. Archive integration tests require 7-Zip at its default installed location.
 
 The tests use disposable fixtures and check that original file contents remain unchanged. They do not run against the example profile's real paths.
 
 ## Current limits
 
-Manual full backups only: no scheduling, incremental/differential chains, retention deletion, encryption, or automatic restore UI. Existing folders and standard 7-Zip extraction tools provide file recovery. There is no VSS snapshot: live databases, application-specific consistency, and files actively being changed require their own backup strategy. ACLs, ownership, alternate streams, hard-link identity, and special filesystem metadata are not preserved. Preview holds the enumerated rows in memory, so extremely large trees can require substantial RAM. Failed-run staging and history/log retention are managed manually.
+Manual full backups only: no scheduling, incremental/differential chains, retention deletion, encryption, or automatic restore UI. Existing folders and standard 7-Zip extraction tools provide file recovery. There is no VSS snapshot: live databases, application-specific consistency, and files actively being changed require their own backup strategy. ACLs, ownership, alternate streams, hard-link identity, and special filesystem metadata are not preserved. Preview holds the enumerated rows in memory, so extremely large trees can require substantial RAM. Failed-run work files, folder staging, partial archives, and history/log retention are managed manually.

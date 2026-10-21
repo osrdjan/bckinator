@@ -5,7 +5,7 @@ using Bckinator.Core;
 
 namespace Bckinator.Tests;
 
-public sealed class ExecutionTests : IDisposable
+public sealed partial class ExecutionTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "Bckinator.Tests", Guid.NewGuid().ToString("N"));
     private string Source => Path.Combine(root, "source");
@@ -128,7 +128,7 @@ public sealed class ExecutionTests : IDisposable
     }
 
     [Fact]
-    public async Task CancellationStopsSevenZipAndKeepsItsInput()
+    public async Task CancellationStopsSevenZipWithoutCreatingSourceCopies()
     {
         Write("file.txt", new string('x', 10000));
         using var ct = new CancellationTokenSource();
@@ -137,7 +137,10 @@ public sealed class ExecutionTests : IDisposable
             if (p.Operation.StartsWith("7-Zip:", StringComparison.Ordinal)) ct.Cancel();
         }), ct.Token);
         Assert.Equal(RunStatus.Cancelled, run.Status);
-        Assert.True(File.Exists(Path.Combine(run.RetainedStagingPath, "snapshot", "file.txt")));
+        Assert.True(Directory.Exists(run.RetainedStagingPath));
+        Assert.True(File.Exists(Path.Combine(run.RetainedStagingPath, "selection.txt")));
+        Assert.Empty(Directory.GetFileSystemEntries(Path.Combine(run.RetainedStagingPath, "view")));
+        Assert.True(File.Exists(Path.Combine(Source, "file.txt")));
         Assert.False(File.Exists(run.OutputPath));
     }
 
@@ -196,14 +199,16 @@ public sealed class ExecutionTests : IDisposable
     }
 
     [Fact]
-    public async Task ExternalProcessFailureKeepsStagingAndProducesNoFinalArchive()
+    public async Task ExternalProcessFailureKeepsMetadataAndProducesNoFinalArchive()
     {
         Write("file.txt");
         var settings = new AppSettings { SevenZipPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "where.exe") };
         var run = await Run(Profile(OutputFormat.SevenZip), settings: settings);
         Assert.Equal(RunStatus.Failed, run.Status);
         Assert.Contains("exit code", run.Message);
-        Assert.True(File.Exists(Path.Combine(run.RetainedStagingPath, "snapshot", "file.txt")));
+        Assert.True(File.Exists(Path.Combine(run.RetainedStagingPath, "selection.txt")));
+        Assert.Empty(Directory.GetFileSystemEntries(Path.Combine(run.RetainedStagingPath, "view")));
+        Assert.True(File.Exists(Path.Combine(Source, "file.txt")));
         Assert.False(File.Exists(run.OutputPath));
     }
 
