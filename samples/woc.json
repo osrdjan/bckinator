@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "data": {
+    "name": "WOC source backup",
+    "description": "Example profile — adjust the paths for this computer before running.",
+    "source": "E:\\prg\\WOC",
+    "destination": "E:\\prg\\bck",
+    "namingPattern": "wocs_{yyMMddHHmm}",
+    "format": "SevenZip",
+    "excludeLinks": true,
+    "continueOnErrors": false,
+    "includeOnly": false,
+    "compression": { "level": 9, "dictionaryMb": 256, "fastBytes": 64, "solidBlockGb": 16, "threads": 12 },
+    "rules": [
+      { "enabled": true, "action": "Exclude", "kind": "DirectoryName", "pattern": ".venv" },
+      { "enabled": true, "action": "Exclude", "kind": "DirectoryName", "pattern": ".idea" },
+      { "enabled": true, "action": "Exclude", "kind": "DirectoryName", "pattern": "__pycache__" },
+      { "enabled": true, "action": "Exclude", "kind": "FilePattern", "pattern": "*.exe" }
+    ],
+    "scopes": [ { "enabled": true, "relativeDirectory": "diag_tools", "includePatterns": "diagrams/\nConsoleHost_history.txt" } ]
+  }
+}

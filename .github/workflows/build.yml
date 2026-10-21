@@ -1,0 +1,20 @@
+name: Build and test
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Ensure 7-Zip for integration tests
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'C:\Program Files\7-Zip\7z.exe')) { choco install 7zip --yes --no-progress }
+      - run: dotnet test Bckinator.slnx -c Release
+      - run: dotnet publish src/Bckinator.App -c Release -r win-x64 --self-contained true -o artifacts/publish/win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bckinator-win-x64
+          path: artifacts/publish/win-x64
