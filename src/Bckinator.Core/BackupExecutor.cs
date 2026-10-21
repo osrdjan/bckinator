@@ -53,7 +53,7 @@ public sealed class BackupExecutor(BackupScanner scanner)
             var warnings = plan.Entries.Where(e => e.IsWarning).Select(e => $"{e.RelativePath}: {e.Reason}").ToList();
             foreach (string warning in warnings) Report("Warning: " + warning);
             Directory.CreateDirectory(destination);
-            CheckFreeSpace(destination, plan.TotalBytes, profile.Format);
+            CheckFreeSpace(destination, plan.TotalBytes, profile);
             var manifest = new List<ManifestFile>();
             string stagedRoot = "";
             if (profile.Format != OutputFormat.Folder)
@@ -202,12 +202,24 @@ public sealed class BackupExecutor(BackupScanner scanner)
         }
     }
 
-    private static void CheckFreeSpace(string destination, long bytes, OutputFormat format)
+    internal static long EstimateRequiredBytes(long bytes, BackupProfile profile)
+    {
+        long required = checked(bytes + (profile.Format != OutputFormat.Folder ? bytes / 100 + 64L * 1024 * 1024 : 16L * 1024 * 1024));
+        if (profile.Format == OutputFormat.WinRar && profile.RarCompression.RecoveryRecord)
+        {
+            int percent = profile.RarCompression.RecoveryRecordPercent;
+            long recovery = checked(required / 100 * percent + (required % 100 * percent + 99) / 100);
+            required = checked(required + recovery);
+        }
+        return required;
+    }
+
+    private static void CheckFreeSpace(string destination, long bytes, BackupProfile profile)
     {
         string? root = Path.GetPathRoot(destination);
         if (string.IsNullOrEmpty(root) || root.StartsWith(@"\\", StringComparison.Ordinal)) return;
         var drive = new DriveInfo(root);
-        long required = checked(bytes + (format != OutputFormat.Folder ? bytes / 100 + 64L * 1024 * 1024 : 16L * 1024 * 1024));
+        long required = EstimateRequiredBytes(bytes, profile);
         if (drive.AvailableFreeSpace < required) throw new IOException($"Insufficient free space. Allow at least {required:N0} bytes for output and overhead.");
     }
 

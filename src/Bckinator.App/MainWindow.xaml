@@ -58,10 +58,21 @@
         </UniformGrid>
        </Expander>
        <StackPanel x:Name="RarOptions" Visibility="{Binding IsWinRar, Converter={StaticResource BoolVisibility}}">
+        <DockPanel Margin="0,8,0,0"><Button x:Name="RarDefaultsButton" DockPanel.Dock="Right" Content="Use RAR defaults" Command="{Binding UseRarDefaults}" Padding="12,6"/><TextBlock Text="Archive format: RAR5" VerticalAlignment="Center" FontWeight="SemiBold"/></DockPanel>
         <TextBlock Text="WinRAR dictionary (MB)" Style="{StaticResource FieldLabel}"/>
         <ComboBox ItemsSource="{Binding RarDictionaries}" SelectedItem="{Binding Draft.RarCompression.DictionaryMb}" Padding="8" HorizontalAlignment="Left" MinWidth="160"/>
-        <CheckBox Content="Create solid archive" IsChecked="{Binding Draft.RarCompression.Solid}" Margin="0,12,0,4"/>
-        <TextBlock Text="Best is the default method. Solid compression can improve compression across similar files and increases the work needed to extract individual files." TextWrapping="Wrap" FontSize="12" Opacity="0.65"/>
+        <CheckBox x:Name="RarSolid" Content="Create solid archive" IsChecked="{Binding Draft.RarCompression.Solid}" Margin="0,12,0,4"/>
+        <CheckBox x:Name="RarRecovery" Content="Add recovery record" IsChecked="{Binding Draft.RarCompression.RecoveryRecord}" Margin="0,8,0,4"/>
+        <StackPanel IsEnabled="{Binding Draft.RarCompression.RecoveryRecord}"><TextBlock Text="Recovery record (%)" Style="{StaticResource FieldLabel}"/><TextBox x:Name="RarRecoveryPercent" Text="{Binding Draft.RarCompression.RecoveryRecordPercent, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, NotifyOnValidationError=True}" Padding="8" HorizontalAlignment="Left" MinWidth="160"/></StackPanel>
+        <Expander Header="Advanced RAR options" Margin="0,12,0,4">
+         <StackPanel Margin="0,8,0,4">
+          <CheckBox Content="Long range search: Always on" IsChecked="{Binding Draft.RarCompression.LongRangeSearch}" Margin="0,4"/>
+          <CheckBox Content="Use BLAKE2 file checksum" IsChecked="{Binding Draft.RarCompression.UseBlake2}" Margin="0,4"/>
+          <TextBlock Text="Delta and executable compression: Auto. Exhaustive search: Off. Quick open information: Add for larger files." TextWrapping="Wrap" Opacity="0.65" Margin="0,8,0,4"/>
+          <TextBlock Text="Archived files are always tested and checked against SHA-256 hashes. Long range search applies to Fast through Best methods." TextWrapping="Wrap" Opacity="0.65" Margin="0,4"/>
+         </StackPanel>
+        </Expander>
+        <TextBlock Text="Defaults: Best, 256 MB dictionary, solid compression, 5% recovery record, long range search and BLAKE2. Solid compression improves similar files; the recovery record adds repair data and increases archive size." TextWrapping="Wrap" FontSize="12" Opacity="0.65"/>
        </StackPanel>
        <TextBlock Text="Archives read files directly from the source without a staging copy. Large dictionaries and many threads can use substantial RAM." TextWrapping="Wrap" FontSize="12" Opacity="0.65" Margin="0,10,0,10"/>
        <CheckBox Content="Exclude symbolic links and junctions (recommended)" IsChecked="{Binding Draft.ExcludeLinks}" Margin="0,5"/>

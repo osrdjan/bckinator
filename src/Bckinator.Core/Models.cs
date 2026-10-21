@@ -61,11 +61,22 @@ public sealed class CompressionOptions : ObservableModel
 public sealed class RarCompressionOptions : ObservableModel
 {
     private RarCompressionMethod method = RarCompressionMethod.Best;
-    private int dictionaryMb = 32;
-    private bool solid;
+    private int dictionaryMb = 256, recoveryRecordPercent = 5;
+    private bool solid = true, recoveryRecord = true, longRangeSearch = true, useBlake2 = true;
     public RarCompressionMethod Method { get => method; set => Set(ref method, value); }
     public int DictionaryMb { get => dictionaryMb; set => Set(ref dictionaryMb, value); }
     public bool Solid { get => solid; set => Set(ref solid, value); }
+    public bool RecoveryRecord { get => recoveryRecord; set => Set(ref recoveryRecord, value); }
+    public int RecoveryRecordPercent { get => recoveryRecordPercent; set => Set(ref recoveryRecordPercent, value); }
+    public bool LongRangeSearch { get => longRangeSearch; set => Set(ref longRangeSearch, value); }
+    public bool UseBlake2 { get => useBlake2; set => Set(ref useBlake2, value); }
+    public void ResetToDefaults()
+    {
+        var defaults = new RarCompressionOptions();
+        Method = defaults.Method; DictionaryMb = defaults.DictionaryMb; Solid = defaults.Solid;
+        RecoveryRecord = defaults.RecoveryRecord; RecoveryRecordPercent = defaults.RecoveryRecordPercent;
+        LongRangeSearch = defaults.LongRangeSearch; UseBlake2 = defaults.UseBlake2;
+    }
 }
 
 public sealed class BackupProfile : ObservableModel

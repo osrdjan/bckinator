@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Diagnostics;
+using System.Text;
 using Bckinator.Core;
 
 namespace Bckinator.Tests;
@@ -11,18 +13,26 @@ public sealed partial class ExecutionTests
     {
         var profile = Profile();
         Assert.Equal(RarCompressionMethod.Best, profile.RarCompression.Method);
-        Assert.Equal(32, profile.RarCompression.DictionaryMb);
-        Assert.False(profile.RarCompression.Solid);
+        Assert.Equal(256, profile.RarCompression.DictionaryMb);
+        Assert.True(profile.RarCompression.Solid);
+        Assert.True(profile.RarCompression.RecoveryRecord);
+        Assert.Equal(5, profile.RarCompression.RecoveryRecordPercent);
+        Assert.True(profile.RarCompression.LongRangeSearch);
+        Assert.True(profile.RarCompression.UseBlake2);
         var args = WinRar.CreateArguments("out.rar", "files.txt", "root", profile.RarCompression);
-        Assert.Contains("-m5", args); Assert.Contains("-md32m", args); Assert.Contains("-s-", args);
+        Assert.Contains("-m5", args); Assert.Contains("-md256m", args); Assert.Contains("-s", args);
         Assert.Contains("-cfg-", args); Assert.Contains("-r-", args); Assert.Contains("-aproot", args);
-        Assert.DoesNotContain("-df", args);
+        foreach (string flag in new[] { "-ma5", "-rr5p", "-t", "-mcl+", "-mcd", "-mce", "-mcx-", "-htb", "-qo", "-oi0", "-o+" }) Assert.Contains(flag, args);
+        foreach (string flag in new[] { "-df", "-dr", "-dw", "-sfx", "-k", "-v", "-ow", "-os", "-ol", "-oh", "-ams", "-ibck", "-ioff", "-p", "-hp" })
+            Assert.DoesNotContain(args, a => a.StartsWith(flag, StringComparison.Ordinal));
         // Old v1 documents omit RAR settings and receive the new defaults on import.
         var legacy = ProfileStore.Export(profile);
         var document = System.Text.Json.Nodes.JsonNode.Parse(legacy)!;
         document["data"]!.AsObject().Remove("rarCompression");
         var imported = ProfileStore.Import(document.ToJsonString());
         Assert.Equal(RarCompressionMethod.Best, imported.RarCompression.Method);
+        Assert.Equal(256, imported.RarCompression.DictionaryMb);
+        Assert.True(imported.RarCompression.Solid);
         imported.Format = OutputFormat.WinRar;
         imported.RarCompression.Method = RarCompressionMethod.Good;
         imported.RarCompression.Solid = true;
@@ -30,6 +40,76 @@ public sealed partial class ExecutionTests
         Assert.Equal(OutputFormat.WinRar, roundTrip.Format);
         Assert.Equal(RarCompressionMethod.Good, roundTrip.RarCompression.Method);
         Assert.True(roundTrip.RarCompression.Solid);
+        // Explicit settings saved by the previous version remain profile overrides.
+        imported.RarCompression.DictionaryMb = 32; imported.RarCompression.Solid = false;
+        roundTrip = ProfileStore.Import(ProfileStore.Export(imported));
+        Assert.Equal(32, roundTrip.RarCompression.DictionaryMb);
+        Assert.False(roundTrip.RarCompression.Solid);
+        roundTrip.RarCompression.ResetToDefaults();
+        Assert.Equal(256, roundTrip.RarCompression.DictionaryMb);
+        Assert.True(roundTrip.RarCompression.Solid);
+    }
+
+    [Fact]
+    public void RarRecoverySpaceEstimateIncludesTheConfiguredPercentage()
+    {
+        var profile = Profile(OutputFormat.WinRar);
+        long withRecovery = BackupExecutor.EstimateRequiredBytes(1_000_003, profile);
+        profile.RarCompression.RecoveryRecord = false;
+        long withoutRecovery = BackupExecutor.EstimateRequiredBytes(1_000_003, profile);
+        Assert.Equal((long)Math.Ceiling(withoutRecovery * 1.05m), withRecovery);
+        var args = WinRar.CreateArguments("out.rar", "list", "root", profile.RarCompression);
+        Assert.DoesNotContain(args, a => a.StartsWith("-rr", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(0)] [InlineData(1001)]
+    public void InvalidRecoveryRecordSizesAreRejected(int percent)
+    {
+        var profile = Profile(OutputFormat.WinRar);
+        profile.RarCompression.RecoveryRecordPercent = percent;
+        Assert.Throws<ArgumentException>(() => ProfileValidator.ValidateDefinition(profile));
+    }
+
+    [RarFact]
+    public async Task RarDefaultsProduceAnUnencryptedSolidRar5ArchiveWithBlake2AndFivePercentRecovery()
+    {
+        Write("first.txt", new string('x', 300000)); Write("identical.txt", new string('x', 300000));
+        var run = await Run(Profile(OutputFormat.WinRar));
+        Assert.True(run.Status == RunStatus.Completed, run.Message);
+        string listing = await RarOutput("lta", run.OutputPath);
+        Assert.Contains("RAR 5, solid, recovery record", listing);
+        Assert.Contains("BLAKE2", listing);
+        Assert.Contains("RR%: 5%", listing);
+        Assert.DoesNotContain("encrypted", listing, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("reference", listing, StringComparison.OrdinalIgnoreCase);
+        // This independent extraction supplies no password and closes stdin, so any
+        // accidental encryption fails instead of being hidden by our verification flags.
+        string extract = Path.Combine(root, "extracted") + Path.DirectorySeparatorChar;
+        await RarOutput("x", run.OutputPath, extract);
+        Assert.Equal(await File.ReadAllTextAsync(Path.Combine(Source, "first.txt")), await File.ReadAllTextAsync(Path.Combine(extract, "snapshot", "first.txt")));
+        Assert.Equal(await File.ReadAllTextAsync(Path.Combine(Source, "identical.txt")), await File.ReadAllTextAsync(Path.Combine(extract, "snapshot", "identical.txt")));
+    }
+
+    private static async Task<string> RarOutput(string command, string archivePath, string? destination = null)
+    {
+        var start = new ProcessStartInfo(new AppSettings().RarPath)
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
+        };
+        foreach (string arg in new[] { command, "-cfg-", "-scfr", "-idc", "-y", "--", archivePath }) start.ArgumentList.Add(arg);
+        if (destination is not null) start.ArgumentList.Add(destination);
+        using var process = Process.Start(start)!;
+        process.StandardInput.Close();
+        var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        try { await process.WaitForExitAsync(timeout.Token); }
+        finally { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+        string result = await output + await error;
+        Assert.True(process.ExitCode == 0, result);
+        return result;
     }
 
     [Theory]

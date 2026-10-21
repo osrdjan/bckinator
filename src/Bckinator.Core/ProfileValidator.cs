@@ -51,6 +51,8 @@ public static class ProfileValidator
         var r = profile.RarCompression;
         if (!Enum.IsDefined(r.Method) || r.DictionaryMb is < 1 or > 1024 || (r.DictionaryMb & (r.DictionaryMb - 1)) != 0)
             throw new ArgumentException("WinRAR requires a supported compression method and a dictionary of 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, or 1024 MB.");
+        if (r.RecoveryRecordPercent is < 1 or > 1000)
+            throw new ArgumentException("WinRAR recovery record size must be between 1% and 1000%.");
     }
 
     public static void ValidateRelative(string path, string label)

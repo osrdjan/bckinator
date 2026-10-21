@@ -116,9 +116,17 @@ public sealed class WorkspaceTests
             Assert.EndsWith(".rar", vm.NamingExample);
             await Execute(vm.SaveProfile);
             Assert.False(vm.IsDirty);
-            vm.Draft.RarCompression.Solid = true;
-            Assert.True(vm.IsDirty);
             vm.Draft.RarCompression.Solid = false;
+            Assert.True(vm.IsDirty);
+            vm.Draft.RarCompression.Solid = true;
+            Assert.False(vm.IsDirty);
+            vm.Draft.RarCompression.DictionaryMb = 32;
+            vm.Draft.RarCompression.RecoveryRecord = false;
+            ((Button)window.FindName("RarDefaultsButton")).Command.Execute(null);
+            Assert.Equal(256, vm.Draft.RarCompression.DictionaryMb);
+            Assert.True(((CheckBox)window.FindName("RarSolid")).IsChecked);
+            Assert.True(((CheckBox)window.FindName("RarRecovery")).IsChecked);
+            Assert.Equal("5", ((TextBox)window.FindName("RarRecoveryPercent")).Text);
             Assert.False(vm.IsDirty);
             Assert.Equal(RarCompressionMethod.Best, (await store.ReadAsync<BackupProfile[]>("profiles.json"))!.Single(p => p.Id == savedId).RarCompression.Method);
             if (File.Exists(vm.Settings.RarPath))

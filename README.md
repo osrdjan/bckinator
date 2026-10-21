@@ -26,11 +26,34 @@ Run `artifacts/publish/win-x64/Bckinator.App.exe`. Keep the publish folder toget
 
 1. Create a profile or duplicate the bundled WOC example. The example comes from `samples/woc.json`; its paths and selection rules are data, not execution logic. Nothing runs automatically.
 2. Choose absolute source and destination paths, Folder, 7-Zip (.7z), or WinRAR (.rar) output, and a naming pattern such as `project_{yyyyMMdd_HHmmss}`. Date/time expressions use .NET formatting and the run's local start time. Archives contain a top-level folder with that same generated name.
-   WinRAR defaults to **Best** compression (`-m5`), a **32 MB dictionary**, and **solid compression off**. Change the method, dictionary, or solid option per profile. Best is WinRAR's slowest, most compressive method; actual size depends on the input data. Existing 7-Zip settings remain intact when switching formats.
+   WinRAR defaults to **RAR5**, **Best** compression (`-m5`), a **256 MB dictionary**, **solid compression on**, a **5% recovery record**, **long range search always on**, and **BLAKE2 checksums**. Change these options per profile. Existing profiles retain their explicitly saved overrides; click **Use RAR defaults**, then **Save profile**, to apply the new defaults. Best is WinRAR's slowest, most compressive method; actual size depends on the input data. Existing 7-Zip settings remain intact when switching formats.
 3. Configure global rules and directory-specific include-only scopes. Select a scope row to edit its included paths, one per line. Directory literals such as `diagrams/` include their eligible descendants.
 4. Save the profile. Edits are explicit; the application asks before discarding unsaved changes. Start and Preview use the currently displayed settings, including unsaved edits, through an isolated snapshot.
 5. Use Preview to inspect relative paths, inclusion decisions, reasons, included file count, and uncompressed size. Filter by decision, path, or reason. Changing settings clears the old preview. Excluded directory trees are represented by their directory row and are not traversed; this avoids unnecessary access and expensive enumeration.
 6. Start Backup. One preview or backup runs at a time. Controls that could change a running operation are disabled; Cancel remains available. History includes output paths, status, duration, size, messages, and links to logs and retained work files.
+
+## RAR defaults
+
+The console command uses `a` (add and replace), `-ma5`, `-m5`, `-md256m`, `-s`, `-rr5p`, `-t`, `-mcl+`, `-mcd`, `-mce`, `-mcx-`, `-htb`, `-qo`, and `-oi0`. Recovery percentage, method, dictionary, solid mode, long range search, and BLAKE2 are profile settings. RAR can reduce the stored dictionary for small inputs. Long range search applies to Fast through Best methods. Use WinRAR/RAR 7 or newer for these compression controls.
+
+| Setting | Default |
+| --- | --- |
+| Archive format / method / dictionary | RAR5 / Best / 256 MB |
+| Solid archive | Enabled |
+| Recovery record | Enabled, 5% of archive size (approximately) |
+| Test archived files | Enabled; additional SHA-256 verification always runs |
+| Long range search | Always on |
+| Delta / executable compression | Auto / Auto |
+| Exhaustive search | Disabled |
+| File checksum | BLAKE2sp |
+| Quick open information | Add for larger files (RAR chooses the threshold) |
+| Identical files as references / original archive name and time | Disabled / Disabled |
+| File security / alternate streams / symbolic links as links / hard links as links | Disabled |
+| Delete after archiving / SFX / locking / volumes / encryption | Disabled |
+| Update mode | Add and replace files within the new archive; completed backups are never overwritten |
+| Background archiving / waiting for other copies / shutdown | Disabled; normal process priority, PC keeps running |
+
+`-cfg-` ignores external presets and environment defaults. Disabled opt-in behaviors are omitted from the command, and password flags are omitted entirely. Archives created by the earlier bckinator RAR integration may have been encrypted with the literal password `-` because it incorrectly used `-p-`; use that password to extract those older backups. New archives are tested with independent password-free extraction.
 
 ## Selection semantics
 
@@ -67,7 +90,7 @@ Successful runs produce a `<output>.manifest.json` sidecar with sizes, timestamp
 
 The default error policy fails the run. **Continue with warnings** can skip unreadable items during scanning or archive preflight, and failed copies for folder output. Successful partial selections are marked **CompletedWithWarnings**, and skipped items are recorded. Once direct compression starts, source changes, missing files, or any nonzero archiver result fail the run instead of publishing an archive with unverifiable contents. There is no VSS snapshot; keep source files stable for the duration of the operation.
 
-Disk-space estimates for direct archives allow roughly the selected uncompressed size plus overhead for a worst-case compressed output, without reserving space for an additional uncompressed staging copy. The root-renaming fallback checks space for another compressed archive. These are estimates, not reservations; UNC free space is not prechecked, and writes can still fail if capacity changes. Tested with installed 7-Zip 26.05; 7-Zip direct mode requires support for literal file lists, `-spm`, and `-sse`. RAR creation and streamed verification were tested with installed WinRAR console RAR 7.12.
+Disk-space estimates for direct archives allow roughly the selected uncompressed size plus overhead for a worst-case compressed output, without reserving space for an additional uncompressed staging copy. Enabled RAR recovery records add their configured percentage to the estimate. The root-renaming fallback checks space for another compressed archive. These are estimates, not reservations; UNC free space is not prechecked, and writes can still fail if capacity changes. Tested with installed 7-Zip 26.05; 7-Zip direct mode requires support for literal file lists, `-spm`, and `-sse`. RAR creation, recovery records, BLAKE2, and password-free extraction were tested with installed WinRAR console RAR 7.23.
 
 ## Application data and profile exchange
 

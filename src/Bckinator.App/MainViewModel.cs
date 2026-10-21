@@ -43,6 +43,7 @@ public sealed class MainViewModel : ObservableModel
         BrowseDestination = new RelayCommand(() => { if (dialogs.PickFolder("Select backup destination") is { } p) Draft.Destination = p; }, () => IsIdle);
         BrowseSevenZip = new RelayCommand(() => { if (dialogs.OpenFile("Locate 7z.exe", "7-Zip executable|7z.exe|Executables|*.exe") is { } p) Settings.SevenZipPath = p; }, () => IsIdle);
         BrowseRar = new RelayCommand(() => { if (dialogs.OpenFile("Locate WinRAR Rar.exe", "WinRAR console executable|Rar.exe") is { } p) Settings.RarPath = p; }, () => IsIdle);
+        UseRarDefaults = new RelayCommand(() => Draft.RarCompression.ResetToDefaults(), () => IsIdle && IsWinRar);
         SaveSettings = new AsyncCommand(() => StorageAsync(async () => { await store.WriteAsync("settings.json", Settings); Operation = "Settings saved"; }), ShowError, () => IsIdle);
         AddRule = new RelayCommand(() => { var r = new SelectionRule { Kind = RuleKind.FilePattern, Pattern = "*.tmp" }; Draft.Rules.Add(r); SelectedRule = r; }, () => IsIdle);
         RemoveRule = new RelayCommand(() => { if (SelectedRule is { } r) Draft.Rules.Remove(r); }, () => IsIdle && SelectedRule is not null);
@@ -160,6 +161,7 @@ public sealed class MainViewModel : ObservableModel
     public ICommand BrowseDestination { get; }
     public ICommand BrowseSevenZip { get; }
     public ICommand BrowseRar { get; }
+    public ICommand UseRarDefaults { get; }
     public ICommand SaveSettings { get; }
     public ICommand AddRule { get; }
     public ICommand RemoveRule { get; }
