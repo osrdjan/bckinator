@@ -26,7 +26,7 @@ public static class ProfileValidator
         if (string.IsNullOrWhiteSpace(profile.Source) || string.IsNullOrWhiteSpace(profile.Destination) || !Path.IsPathFullyQualified(profile.Source) || !Path.IsPathFullyQualified(profile.Destination))
             throw new ArgumentException("Source and destination must be absolute paths.");
         if (!Enum.IsDefined(profile.Format)) throw new ArgumentException("Select a supported output format.");
-        if (profile.Compression is null || profile.Rules is null || profile.Scopes is null) throw new ArgumentException("Profile settings, rules, and scopes are required.");
+        if (profile.Compression is null || profile.RarCompression is null || profile.Rules is null || profile.Scopes is null) throw new ArgumentException("Profile settings, rules, and scopes are required.");
         BackupNaming.Generate(profile.NamingPattern, DateTimeOffset.Now);
         foreach (var rule in profile.Rules)
         {
@@ -48,6 +48,9 @@ public static class ProfileValidator
         var c = profile.Compression;
         if (c.Level is < 0 or > 9 || c.DictionaryMb is < 1 or > 1536 || c.FastBytes is < 5 or > 273 || c.SolidBlockGb is < 1 or > 1024 || c.Threads is < 1 or > 256)
             throw new ArgumentException("Compression limits: level 0–9, dictionary 1–1536 MB, fast bytes 5–273, solid block 1–1024 GB, threads 1–256.");
+        var r = profile.RarCompression;
+        if (!Enum.IsDefined(r.Method) || r.DictionaryMb is < 1 or > 1024 || (r.DictionaryMb & (r.DictionaryMb - 1)) != 0)
+            throw new ArgumentException("WinRAR requires a supported compression method and a dictionary of 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, or 1024 MB.");
     }
 
     public static void ValidateRelative(string path, string label)

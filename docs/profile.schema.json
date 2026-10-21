@@ -19,11 +19,12 @@
         "source": { "type": "string", "minLength": 1 },
         "destination": { "type": "string", "minLength": 1 },
         "namingPattern": { "type": "string", "minLength": 1 },
-        "format": { "enum": ["Folder", "SevenZip"] },
+        "format": { "enum": ["Folder", "SevenZip", "WinRar"] },
         "excludeLinks": { "type": "boolean", "default": true },
         "continueOnErrors": { "type": "boolean", "default": false },
         "includeOnly": { "type": "boolean", "default": false },
         "compression": { "$ref": "#/$defs/compression" },
+        "rarCompression": { "$ref": "#/$defs/rarCompression" },
         "rules": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
         "scopes": { "type": "array", "items": { "$ref": "#/$defs/scope" } }
       }
@@ -36,6 +37,14 @@
         "fastBytes": { "type": "integer", "minimum": 5, "maximum": 273 },
         "solidBlockGb": { "type": "integer", "minimum": 1, "maximum": 1024 },
         "threads": { "type": "integer", "minimum": 1, "maximum": 256 }
+      }
+    },
+    "rarCompression": {
+      "type": "object",
+      "properties": {
+        "method": { "enum": ["Store", "Fastest", "Fast", "Normal", "Good", "Best"], "default": "Best" },
+        "dictionaryMb": { "enum": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024], "default": 32 },
+        "solid": { "type": "boolean", "default": false }
       }
     },
     "rule": {

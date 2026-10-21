@@ -18,7 +18,8 @@ public abstract class ObservableModel : INotifyPropertyChanged
     protected void Notify([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new(name));
 }
 
-public enum OutputFormat { Folder, SevenZip }
+public enum OutputFormat { Folder, SevenZip, WinRar }
+public enum RarCompressionMethod { Store, Fastest, Fast, Normal, Good, Best }
 public enum RuleAction { Exclude, Include }
 public enum RuleKind { DirectoryName, FilePattern, RelativePath, PathGlob }
 public enum RunStatus { Completed, CompletedWithWarnings, Failed, Cancelled }
@@ -57,6 +58,16 @@ public sealed class CompressionOptions : ObservableModel
     public int Threads { get => threads; set => Set(ref threads, value); }
 }
 
+public sealed class RarCompressionOptions : ObservableModel
+{
+    private RarCompressionMethod method = RarCompressionMethod.Best;
+    private int dictionaryMb = 32;
+    private bool solid;
+    public RarCompressionMethod Method { get => method; set => Set(ref method, value); }
+    public int DictionaryMb { get => dictionaryMb; set => Set(ref dictionaryMb, value); }
+    public bool Solid { get => solid; set => Set(ref solid, value); }
+}
+
 public sealed class BackupProfile : ObservableModel
 {
     private string name = "New profile", description = "", source = "", destination = "", namingPattern = "backup_{yyyyMMdd_HHmmss}";
@@ -73,6 +84,7 @@ public sealed class BackupProfile : ObservableModel
     public bool ContinueOnErrors { get => continueOnErrors; set => Set(ref continueOnErrors, value); }
     public bool IncludeOnly { get => includeOnly; set => Set(ref includeOnly, value); }
     public CompressionOptions Compression { get; set; } = new();
+    public RarCompressionOptions RarCompression { get; set; } = new();
     public ObservableCollection<SelectionRule> Rules { get; set; } = [];
     public ObservableCollection<DirectoryScope> Scopes { get; set; } = [];
 }
@@ -81,6 +93,8 @@ public sealed class AppSettings : ObservableModel
 {
     private string sevenZipPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "7-Zip", "7z.exe");
     public string SevenZipPath { get => sevenZipPath; set => Set(ref sevenZipPath, value); }
+    private string rarPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WinRAR", "Rar.exe");
+    public string RarPath { get => rarPath; set => Set(ref rarPath, value); }
 }
 
 public sealed record SelectionDecision(bool Included, bool Traverse, string Reason);

@@ -37,12 +37,15 @@ public sealed class BackupExecutor(BackupScanner scanner)
             var paths = ProfileValidator.ValidatePaths(profile);
             destination = paths.Destination;
             string name = BackupNaming.Generate(profile.NamingPattern, run.StartedAt);
-            run.OutputPath = Path.Combine(destination, name + (profile.Format == OutputFormat.SevenZip ? ".7z" : ""));
+            string extension = profile.Format switch { OutputFormat.SevenZip => ".7z", OutputFormat.WinRar => ".rar", _ => "" };
+            run.OutputPath = Path.Combine(destination, name + extension);
             string sidecar = run.OutputPath + ".manifest.json";
             if (File.Exists(run.OutputPath) || Directory.Exists(run.OutputPath) || File.Exists(sidecar) || Directory.Exists(sidecar))
                 throw new IOException($"The output name already exists: {run.OutputPath}. Change the naming pattern or wait for the next timestamp.");
             if (profile.Format == OutputFormat.SevenZip && !File.Exists(settings.SevenZipPath))
                 throw new FileNotFoundException("Set a valid 7z.exe path in Settings before starting.", settings.SevenZipPath);
+            if (profile.Format == OutputFormat.WinRar && !File.Exists(settings.RarPath))
+                throw new FileNotFoundException("Set a valid WinRAR Rar.exe path in Settings before starting.", settings.RarPath);
 
             var plan = await scanner.ScanAsync(profile, progress, ct);
             ct.ThrowIfCancellationRequested();
@@ -53,12 +56,13 @@ public sealed class BackupExecutor(BackupScanner scanner)
             CheckFreeSpace(destination, plan.TotalBytes, profile.Format);
             var manifest = new List<ManifestFile>();
             string stagedRoot = "";
-            if (profile.Format == OutputFormat.SevenZip)
+            if (profile.Format != OutputFormat.Folder)
             {
                 staging = Path.Combine(destination, ".bckinator-work-" + run.Id.ToString("N"));
                 Directory.CreateDirectory(staging);
-                temporaryArchive = Path.Combine(destination, $".{name}.{run.Id:N}.partial.7z");
-                manifest = await new DirectArchiveBackup(new SevenZip(settings.SevenZipPath)).CreateAsync(
+                temporaryArchive = Path.Combine(destination, $".{name}.{run.Id:N}.partial{extension}");
+                ArchiveTool archive = profile.Format == OutputFormat.WinRar ? new WinRar(settings.RarPath) : new SevenZip(settings.SevenZipPath);
+                manifest = await new DirectArchiveBackup(archive).CreateAsync(
                     profile, plan, paths.Source, staging, name, temporaryArchive, warnings, line => Report(line), ct);
             }
             else
@@ -132,7 +136,7 @@ public sealed class BackupExecutor(BackupScanner scanner)
 
             string manifestPath = Path.Combine(staging, "manifest.json");
             await File.WriteAllTextAsync(manifestPath, JsonSerializer.Serialize(new BackupManifest(1, run.Id, profile.Name, run.StartedAt, manifest, warnings), ProfileStore.JsonOptions), ct);
-            if (profile.Format == OutputFormat.SevenZip)
+            if (profile.Format != OutputFormat.Folder)
             {
                 ct.ThrowIfCancellationRequested();
                 File.Move(temporaryArchive, run.OutputPath, overwrite: false);
@@ -157,7 +161,7 @@ public sealed class BackupExecutor(BackupScanner scanner)
             {
                 // Source aliases have been detached. Cleanup refuses to follow any remaining links.
                 string absolute = Path.GetFullPath(staging);
-                string expectedDirectory = (profile.Format == OutputFormat.SevenZip ? ".bckinator-work-" : ".bckinator-staging-") + run.Id.ToString("N");
+                string expectedDirectory = (profile.Format != OutputFormat.Folder ? ".bckinator-work-" : ".bckinator-staging-") + run.Id.ToString("N");
                 if (!ProfileValidator.IsSameOrBelow(absolute, destination) || Path.GetFileName(absolute) != expectedDirectory)
                     throw new IOException("Staging cleanup boundary check failed.");
                 try { DeleteWorkDirectory(absolute); }
@@ -203,7 +207,7 @@ public sealed class BackupExecutor(BackupScanner scanner)
         string? root = Path.GetPathRoot(destination);
         if (string.IsNullOrEmpty(root) || root.StartsWith(@"\\", StringComparison.Ordinal)) return;
         var drive = new DriveInfo(root);
-        long required = checked(bytes + (format == OutputFormat.SevenZip ? bytes / 100 + 64L * 1024 * 1024 : 16L * 1024 * 1024));
+        long required = checked(bytes + (format != OutputFormat.Folder ? bytes / 100 + 64L * 1024 * 1024 : 16L * 1024 * 1024));
         if (drive.AvailableFreeSpace < required) throw new IOException($"Insufficient free space. Allow at least {required:N0} bytes for output and overhead.");
     }
 

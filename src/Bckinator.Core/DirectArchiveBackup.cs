@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Bckinator.Core;
 
-internal sealed class DirectArchiveBackup(SevenZip archive, bool allowAlias = true)
+internal sealed class DirectArchiveBackup(ArchiveTool archive, bool allowAlias = true)
 {
     public async Task<List<ManifestFile>> CreateAsync(BackupProfile profile, BackupPlan plan, string source, string work, string rootName, string archivePath, List<string> warnings, Action<string> report, CancellationToken ct)
     {
@@ -47,21 +47,22 @@ internal sealed class DirectArchiveBackup(SevenZip archive, bool allowAlias = tr
 
         string view = System.IO.Path.Combine(work, "view");
         Directory.CreateDirectory(view);
-        using var alias = allowAlias ? DirectoryAlias.TryCreate(System.IO.Path.Combine(view, rootName), source, report) : null;
+        using var alias = allowAlias && !archive.NativeRootPrefix ? DirectoryAlias.TryCreate(System.IO.Path.Combine(view, rootName), source, report) : null;
         string prefix = alias is null ? "" : rootName + "/";
         string workingDirectory = alias is null ? source : view;
         string files = System.IO.Path.Combine(work, "selection.txt");
         string excluded = System.IO.Path.Combine(work, "empty-directory-contents.txt");
         var selectedPaths = manifest.Select(f => prefix + Glob.Normalize(f.RelativePath))
-            .Concat(emptyDirectories.Select(d => prefix + Glob.Normalize(d.RelativePath) + "/"));
+            .Concat(emptyDirectories.Select(d => prefix + Glob.Normalize(d.RelativePath) + (archive.NativeRootPrefix ? "" : "/")));
         await File.WriteAllLinesAsync(files, selectedPaths.Select(Quote), new UTF8Encoding(false), ct);
         await File.WriteAllLinesAsync(excluded, emptyDirectories.Select(d => Quote(prefix + Glob.Normalize(d.RelativePath) + "/*")), new UTF8Encoding(false), ct);
 
         report($"Compressing {manifest.Count:N0} files directly from the source; work files contain only metadata.");
-        await archive.CreateAsync(archivePath, workingDirectory, files, excluded, profile.Compression, line => report("7-Zip: " + line), ct);
+        void Log(string line) => report(archive.Name + ": " + line);
+        await archive.CreateAsync(archivePath, workingDirectory, files, excluded, profile, rootName, Log, ct);
         var entries = await archive.ListAsync(archivePath, ct);
-        ValidateEntries(entries, prefix, manifest, emptyDirectories);
-        if (alias is null)
+        ValidateEntries(entries, archive.NativeRootPrefix ? rootName + "/" : prefix, manifest, emptyDirectories);
+        if (alias is null && !archive.NativeRootPrefix)
         {
             report("A source folder alias is unavailable. Adding the timestamped root by renaming archive entries; this rewrites compressed archive data once, without copying source files.");
             string volume = System.IO.Path.GetPathRoot(archivePath)!;
@@ -69,7 +70,7 @@ internal sealed class DirectArchiveBackup(SevenZip archive, bool allowAlias = tr
                 throw new IOException("Insufficient free space for the archive root-name rewrite. The partial archive was retained.");
             string pairs = System.IO.Path.Combine(work, "rename.txt");
             await File.WriteAllLinesAsync(pairs, entries.SelectMany(e => new[] { Quote(e.Path), Quote(rootName + "/" + Glob.Normalize(e.Path)) }), new UTF8Encoding(false), ct);
-            await archive.RenameAsync(archivePath, pairs, line => report("7-Zip: " + line), ct);
+            await archive.RenameAsync(archivePath, pairs, Log, ct);
             entries = await archive.ListAsync(archivePath, ct);
         }
         ValidateEntries(entries, rootName + "/", manifest, emptyDirectories);
@@ -80,16 +81,16 @@ internal sealed class DirectArchiveBackup(SevenZip archive, bool allowAlias = tr
             CheckMetadata(input, file.Size, file.LastWriteUtc);
         }
         report("Testing archive integrity…");
-        await archive.VerifyAsync(archivePath, line => report("7-Zip: " + line), ct);
+        await archive.VerifyAsync(archivePath, Log, ct);
         report("Verifying archived SHA-256 hashes through an in-memory stream…");
         var expected = manifest.ToDictionary(f => rootName + "/" + Glob.Normalize(f.RelativePath), StringComparer.Ordinal);
-        await archive.VerifyContentAsync(archivePath, entries, expected, line => report("7-Zip: " + line), ct);
+        await archive.VerifyContentAsync(archivePath, entries, expected, Log, ct);
         return manifest;
     }
 
     private static string Quote(string path)
     {
-        if (path.IndexOfAny(['"', '\r', '\n']) >= 0) throw new IOException("A selected path cannot be represented safely in a 7-Zip file list.");
+        if (path.IndexOfAny(['"', '\r', '\n']) >= 0) throw new IOException("A selected path cannot be represented safely in an archive file list.");
         return '"' + path + '"';
     }
 

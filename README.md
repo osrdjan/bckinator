@@ -1,10 +1,10 @@
 # bckinator
 
-A Windows desktop backup utility built with C# .NET 10, WPF, and MVVM. The Workspace layout keeps reusable profiles on the left and Profile, Rules, Preview, History, and Settings tabs on the right. Runtime projects use only built-in .NET/WPF libraries; 7-Zip runs as a separate installed executable.
+A Windows desktop backup utility built with C# .NET 10, WPF, and MVVM. The Workspace layout keeps reusable profiles on the left and Profile, Rules, Preview, History, and Settings tabs on the right. Runtime projects use only built-in .NET/WPF libraries; 7-Zip and WinRAR run as separate installed executables.
 
 ## Build and run
 
-Requirements: Windows, the .NET 10 SDK, and installed **64-bit 7-Zip** for archive backups and archive integration tests. Folder backups do not require 7-Zip.
+Requirements: Windows and the .NET 10 SDK. Install **64-bit 7-Zip** for `.7z` output or **WinRAR** for `.rar` output. Each format uses only its own archiver, including verification. Folder backups require neither. WinRAR is separately licensed and is not bundled.
 
 ```powershell
 dotnet build Bckinator.slnx
@@ -12,7 +12,7 @@ dotnet test Bckinator.slnx
 dotnet run --project src/Bckinator.App
 ```
 
-Set the executable location in **Settings** if `C:\Program Files\7-Zip\7z.exe` is not correct. You can use Visual Studio with the .NET desktop development workload or another editor with the .NET SDK. No administrator access is needed to run the app.
+Configure executable locations in **Settings**. Defaults are `C:\Program Files\7-Zip\7z.exe` and `C:\Program Files\WinRAR\Rar.exe`. Use the console `Rar.exe` shipped with WinRAR. You can use Visual Studio with the .NET desktop development workload or another editor with the .NET SDK. No administrator access is needed to run the app.
 
 Publish a portable, self-contained x64 folder:
 
@@ -20,12 +20,13 @@ Publish a portable, self-contained x64 folder:
 dotnet publish src/Bckinator.App -c Release -r win-x64 --self-contained true -o artifacts/publish/win-x64
 ```
 
-Run `artifacts/publish/win-x64/Bckinator.App.exe`. Keep the publish folder together. 7-Zip is configured separately and is not bundled.
+Run `artifacts/publish/win-x64/Bckinator.App.exe`. Keep the publish folder together. Both archivers are configured separately and are not bundled.
 
 ## Using Workspace
 
 1. Create a profile or duplicate the bundled WOC example. The example comes from `samples/woc.json`; its paths and selection rules are data, not execution logic. Nothing runs automatically.
-2. Choose absolute source and destination paths, Folder or SevenZip output, and a naming pattern such as `project_{yyyyMMdd_HHmmss}`. Date/time expressions use .NET formatting and the run's local start time. Archives contain a top-level folder with that same generated name.
+2. Choose absolute source and destination paths, Folder, 7-Zip (.7z), or WinRAR (.rar) output, and a naming pattern such as `project_{yyyyMMdd_HHmmss}`. Date/time expressions use .NET formatting and the run's local start time. Archives contain a top-level folder with that same generated name.
+   WinRAR defaults to **Best** compression (`-m5`), a **32 MB dictionary**, and **solid compression off**. Change the method, dictionary, or solid option per profile. Best is WinRAR's slowest, most compressive method; actual size depends on the input data. Existing 7-Zip settings remain intact when switching formats.
 3. Configure global rules and directory-specific include-only scopes. Select a scope row to edit its included paths, one per line. Directory literals such as `diagrams/` include their eligible descendants.
 4. Save the profile. Edits are explicit; the application asks before discarding unsaved changes. Start and Preview use the currently displayed settings, including unsaved edits, through an isolated snapshot.
 5. Use Preview to inspect relative paths, inclusion decisions, reasons, included file count, and uncompressed size. Filter by decision, path, or reason. Changing settings clears the old preview. Excluded directory trees are represented by their directory row and are not traversed; this avoids unnecessary access and expensive enumeration.
@@ -50,29 +51,30 @@ Symbolic links and junctions are excluded by default. If this is unchecked, only
 
 ## Execution and recovery
 
-Each run is an independent full backup. Source file contents are opened for reading and are never written or deleted. There are two execution paths:
+Each run is an independent full backup. Source file contents are opened for reading and are never written or deleted. There are archive and folder execution paths:
 
 - **7-Zip archives:** selected files are hashed during preflight, then the installed `7z.exe` compresses an explicit literal file list directly from the source. No uncompressed payload copy is written. A `.bckinator-work-<run-id>` directory contains only file lists and manifest metadata. A temporary directory symlink or junction gives the source the generated archive root name without copying file data. The alias is detached on success, failure, or cancellation and is never recursively deleted. Source link restrictions continue to apply to actual source paths.
+- **WinRAR archives:** selected files use the same preflight and SHA-256 checks, then `Rar.exe` reads the explicit file list directly from the source. Its native archive-path prefix (`-ap`) adds the generated root folder, avoiding aliases and root-renaming rewrites. `-r-` stores listed empty directory leaves without recursively reading their contents. `-cfg-` prevents external RAR configuration from changing the operation.
 - **Folder backups:** selected files are copied into `.bckinator-staging-<run-id>` under the destination, verified with SHA-256, and renamed to their final output folder. This temporary name prevents partially copied folders from looking complete.
 
-When a source alias is unavailable (for example, some network sources without symbolic-link privileges), direct compression still runs from the source. The application then prefixes the archived paths with the generated root by renaming entries. **This fallback rewrites the compressed archive once**, requires space for that extra compressed copy, and is explicitly logged. Local NTFS sources normally use a junction without administrator privileges and avoid this rewrite. No fallback stages uncompressed source data.
+For 7-Zip, when a source alias is unavailable (for example, some network sources without symbolic-link privileges), direct compression still runs from the source. The application then prefixes the archived paths with the generated root by renaming entries. **This fallback rewrites the compressed archive once**, requires space for that extra compressed copy, and is explicitly logged. Local NTFS sources normally use a junction without administrator privileges and avoid this rewrite. No fallback stages uncompressed source data.
 
-Archives keep a unique `.partial.7z` name while being built. Verification checks the exact archived file and empty-directory selection, runs `7z t`, and extracts file contents through a memory pipe to compare their SHA-256 hashes against preflight hashes. No verification extraction is written to disk. Any missing, extra, changed, or corrupt content prevents publication. Existing outputs and manifest sidecars are never overwritten.
+Archives keep a unique `.partial.7z` or `.partial.rar` name while being built. Verification checks the exact archived file and empty-directory selection, runs the selected archiver's integrity test, and extracts file contents through a memory pipe to compare their SHA-256 hashes against preflight hashes. No verification extraction is written to disk. Any missing, extra, changed, or corrupt content prevents publication. Existing outputs and manifest sidecars are never overwritten.
 
 Empty eligible directory leaves are included explicitly, with their children excluded so newly created files cannot be pulled in by recursive directory processing. Nonempty archive parent folders are represented by their file paths; file modification timestamps are preserved, while implicit parent-folder timestamps may be recreated during extraction. Folder backups also preserve ordinary directory modification timestamps where practical. An empty file selection is rejected.
 
 Successful runs produce a `<output>.manifest.json` sidecar with sizes, timestamps, SHA-256 hashes matching the verified backup content, and warnings. Work files are cleaned only after verification and publication; cleanup refuses to follow links. Failed and cancelled archives retain metadata work files and any partial archive, rather than an uncompressed source copy. Failed folder runs retain their copied staging data. **History → Open work files** locates the retained directory. Partial archives are not complete backups. Old history records remain compatible; the JSON field `retainedStagingPath` now also represents archive metadata work directories.
 
-The default error policy fails the run. **Continue with warnings** can skip unreadable items during scanning or archive preflight, and failed copies for folder output. Successful partial selections are marked **CompletedWithWarnings**, and skipped items are recorded. Once direct compression starts, source changes, missing files, or any nonzero 7-Zip result fail the run instead of publishing an archive with unverifiable contents. There is no VSS snapshot; keep source files stable for the duration of the operation.
+The default error policy fails the run. **Continue with warnings** can skip unreadable items during scanning or archive preflight, and failed copies for folder output. Successful partial selections are marked **CompletedWithWarnings**, and skipped items are recorded. Once direct compression starts, source changes, missing files, or any nonzero archiver result fail the run instead of publishing an archive with unverifiable contents. There is no VSS snapshot; keep source files stable for the duration of the operation.
 
-Disk-space estimates for direct archives allow roughly the selected uncompressed size plus overhead for a worst-case compressed output, without reserving space for an additional uncompressed staging copy. The root-renaming fallback checks space for another compressed archive. These are estimates, not reservations; UNC free space is not prechecked, and writes can still fail if capacity changes. Tested with installed 7-Zip 26.05; direct mode requires support for literal file lists, `-spm`, and `-sse`.
+Disk-space estimates for direct archives allow roughly the selected uncompressed size plus overhead for a worst-case compressed output, without reserving space for an additional uncompressed staging copy. The root-renaming fallback checks space for another compressed archive. These are estimates, not reservations; UNC free space is not prechecked, and writes can still fail if capacity changes. Tested with installed 7-Zip 26.05; 7-Zip direct mode requires support for literal file lists, `-spm`, and `-sse`. RAR creation and streamed verification were tested with installed WinRAR console RAR 7.12.
 
 ## Application data and profile exchange
 
 The default data directory is `%LOCALAPPDATA%\Bckinator`:
 
 - `profiles.json`: saved profiles in a versioned envelope.
-- `settings.json`: configured 7-Zip executable location.
+- `settings.json`: configured 7-Zip and WinRAR console executable locations.
 - `history.json`: run results.
 - `runs/<id>.log`: persistent run logs. The on-screen viewer keeps the most recent 2,000 lines.
 
@@ -88,12 +90,12 @@ dotnet run --project src/Bckinator.App -- --data-dir D:\scratch\bckinator-config
 
 ## Architecture and validation
 
-- `Bckinator.Core`: profile models and storage, rule evaluation, scanning, naming, direct archive streaming, folder staging, verification, and 7-Zip process integration. It has no WPF dependency.
+- `Bckinator.Core`: profile models and storage, rule evaluation, scanning, naming, direct archive streaming, folder staging, verification, and shared 7-Zip/WinRAR process integration. It has no WPF dependency.
 - `Bckinator.App`: Workspace views, view model, commands, and native folder/file dialogs. Uses the built-in Fluent theme following system appearance.
-- `Bckinator.Tests`: rule, nesting, glob, serialization, naming, path-boundary, cancellation, locked-file, collision, folder, archive, and configuration tests. Direct archive tests cover metadata-only work files, alias cleanup, root-renaming fallback, exact selection, late-added directory contents, source mutation with unchanged size/timestamp, and streamed SHA-256 verification for solid and non-solid archives. A WPF dispatcher test loads all tabs and exercises bound Save, Preview, and Start commands. Archive integration tests require 7-Zip at its default installed location.
+- `Bckinator.Tests`: rule, nesting, glob, serialization, naming, path-boundary, cancellation, locked-file, collision, folder, archive, and configuration tests. Direct archive tests cover metadata-only work files, alias cleanup, root-renaming fallback, exact selection, late-added directory contents, source mutation with unchanged size/timestamp, and streamed SHA-256 verification for solid and non-solid archives. A WPF dispatcher test loads all tabs and exercises bound Save, Preview, and Start commands. 7-Zip integration tests require its default installed location. WinRAR integration tests run when `C:\Program Files\WinRAR\Rar.exe` is installed and are explicitly skipped otherwise. RAR tests cover Unicode and special filenames, exact selection, late-added files, source mutation, solid and non-solid streaming, collision handling, and missing executables. The dispatcher test also exercises bound RAR settings, persistence, and a real RAR backup when available.
 
 The tests use disposable fixtures and check that original file contents remain unchanged. They do not run against the example profile's real paths.
 
 ## Current limits
 
-Manual full backups only: no scheduling, incremental/differential chains, retention deletion, encryption, or automatic restore UI. Existing folders and standard 7-Zip extraction tools provide file recovery. There is no VSS snapshot: live databases, application-specific consistency, and files actively being changed require their own backup strategy. ACLs, ownership, alternate streams, hard-link identity, and special filesystem metadata are not preserved. Preview holds the enumerated rows in memory, so extremely large trees can require substantial RAM. Failed-run work files, folder staging, partial archives, and history/log retention are managed manually.
+Manual full backups only: no scheduling, incremental/differential chains, retention deletion, encryption, or automatic restore UI. Existing folders and standard archive extraction tools provide file recovery. There is no VSS snapshot: live databases, application-specific consistency, and files actively being changed require their own backup strategy. ACLs, ownership, alternate streams, hard-link identity, and special filesystem metadata are not preserved. Preview holds the enumerated rows in memory, so extremely large trees can require substantial RAM. Failed-run work files, folder staging, partial archives, and history/log retention are managed manually.

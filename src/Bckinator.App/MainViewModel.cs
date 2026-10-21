@@ -42,6 +42,7 @@ public sealed class MainViewModel : ObservableModel
         BrowseSource = new RelayCommand(() => { if (dialogs.PickFolder("Select source folder") is { } p) Draft.Source = p; }, () => IsIdle);
         BrowseDestination = new RelayCommand(() => { if (dialogs.PickFolder("Select backup destination") is { } p) Draft.Destination = p; }, () => IsIdle);
         BrowseSevenZip = new RelayCommand(() => { if (dialogs.OpenFile("Locate 7z.exe", "7-Zip executable|7z.exe|Executables|*.exe") is { } p) Settings.SevenZipPath = p; }, () => IsIdle);
+        BrowseRar = new RelayCommand(() => { if (dialogs.OpenFile("Locate WinRAR Rar.exe", "WinRAR console executable|Rar.exe") is { } p) Settings.RarPath = p; }, () => IsIdle);
         SaveSettings = new AsyncCommand(() => StorageAsync(async () => { await store.WriteAsync("settings.json", Settings); Operation = "Settings saved"; }), ShowError, () => IsIdle);
         AddRule = new RelayCommand(() => { var r = new SelectionRule { Kind = RuleKind.FilePattern, Pattern = "*.tmp" }; Draft.Rules.Add(r); SelectedRule = r; }, () => IsIdle);
         RemoveRule = new RelayCommand(() => { if (SelectedRule is { } r) Draft.Rules.Remove(r); }, () => IsIdle && SelectedRule is not null);
@@ -63,7 +64,10 @@ public sealed class MainViewModel : ObservableModel
     public ObservableCollection<BackupRun> History { get; } = [];
     public ObservableCollection<string> Logs { get; } = [];
     public AppSettings Settings { get; private set; } = new();
-    public Array OutputFormats { get; } = Enum.GetValues<OutputFormat>();
+    public KeyValuePair<OutputFormat, string>[] OutputFormats { get; } =
+        [new(OutputFormat.Folder, "Folder"), new(OutputFormat.SevenZip, "7-Zip (.7z)"), new(OutputFormat.WinRar, "WinRAR (.rar)")];
+    public Array RarMethods { get; } = Enum.GetValues<RarCompressionMethod>();
+    public int[] RarDictionaries { get; } = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
     public Array RuleKinds { get; } = Enum.GetValues<RuleKind>();
     public Array RuleActions { get; } = Enum.GetValues<RuleAction>();
     public string[] PreviewFilters { get; } = ["All", "Included", "Excluded", "Warnings"];
@@ -94,8 +98,9 @@ public sealed class MainViewModel : ObservableModel
     public ICollectionView PreviewItems { get; private set; } = CollectionViewSource.GetDefaultView(Array.Empty<PlanEntry>());
     public string PreviewSearch { get => previewSearch; set { Set(ref previewSearch, value); RefreshPreview(); } }
     public string PreviewFilter { get => previewFilter; set { Set(ref previewFilter, value); RefreshPreview(); } }
-    public string NamingExample { get { try { return BackupNaming.Generate(Draft.NamingPattern, DateTimeOffset.Now) + (Draft.Format == OutputFormat.SevenZip ? ".7z" : ""); } catch (Exception ex) { return ex.Message; } } }
-    public bool IsArchive => Draft.Format == OutputFormat.SevenZip;
+    public string NamingExample { get { try { return BackupNaming.Generate(Draft.NamingPattern, DateTimeOffset.Now) + (Draft.Format switch { OutputFormat.SevenZip => ".7z", OutputFormat.WinRar => ".rar", _ => "" }); } catch (Exception ex) { return ex.Message; } } }
+    public bool IsSevenZip => Draft.Format == OutputFormat.SevenZip;
+    public bool IsWinRar => Draft.Format == OutputFormat.WinRar;
 
     public string CompressionPreset
     {
@@ -154,6 +159,7 @@ public sealed class MainViewModel : ObservableModel
     public ICommand BrowseSource { get; }
     public ICommand BrowseDestination { get; }
     public ICommand BrowseSevenZip { get; }
+    public ICommand BrowseRar { get; }
     public ICommand SaveSettings { get; }
     public ICommand AddRule { get; }
     public ICommand RemoveRule { get; }
@@ -313,7 +319,7 @@ public sealed class MainViewModel : ObservableModel
         try
         {
             var snapshot = ProfileStore.Clone(Draft);
-            var settings = new AppSettings { SevenZipPath = Settings.SevenZipPath };
+            var settings = new AppSettings { SevenZipPath = Settings.SevenZipPath, RarPath = Settings.RarPath };
             // Run the orchestration off the UI thread, including filesystem metadata and hashing work.
             var progress = MakeProgress();
             var run = await Task.Run(() => new BackupExecutor(scanner).ExecuteAsync(snapshot, settings, store.RunsDirectory, progress, cancellation!.Token));
@@ -362,7 +368,7 @@ public sealed class MainViewModel : ObservableModel
     }
     private void Watch()
     {
-        watched.Add(Draft); watched.Add(Draft.Compression);
+        watched.Add(Draft); watched.Add(Draft.Compression); watched.Add(Draft.RarCompression);
         watched.AddRange(Draft.Rules); watched.AddRange(Draft.Scopes);
         foreach (var model in watched) model.PropertyChanged += ModelChanged;
         Draft.Rules.CollectionChanged += CollectionChanged;
@@ -387,7 +393,7 @@ public sealed class MainViewModel : ObservableModel
         PreviewSummary = "Settings changed. Run Preview again to refresh the selection.";
         NotifyDraft();
     }
-    private void NotifyDraft() { Notify(nameof(IsDirty)); Notify(nameof(DraftState)); Notify(nameof(NamingExample)); Notify(nameof(IsArchive)); }
+    private void NotifyDraft() { Notify(nameof(IsDirty)); Notify(nameof(DraftState)); Notify(nameof(NamingExample)); Notify(nameof(IsSevenZip)); Notify(nameof(IsWinRar)); }
     private void ShowError(Exception ex) { Error = ex.Message; Operation = "Action failed"; AddLog(ex.Message); }
     private void TryOpen(string? path) { if (string.IsNullOrEmpty(path)) return; try { dialogs.OpenLocation(path); } catch (Exception ex) { ShowError(ex); } }
     private static string FormatBytes(long bytes) => bytes >= 1024L * 1024 * 1024 ? $"{bytes / (1024.0 * 1024 * 1024):N2} GiB" : bytes >= 1024 * 1024 ? $"{bytes / (1024.0 * 1024):N2} MiB" : bytes >= 1024 ? $"{bytes / 1024.0:N1} KiB" : $"{bytes:N0} bytes";

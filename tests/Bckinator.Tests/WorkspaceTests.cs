@@ -100,6 +100,39 @@ public sealed class WorkspaceTests
             Assert.Empty(Directory.GetDirectories(Path.Combine(root, "backups"), ".bckinator-work-*"));
             Assert.Contains(vm.Logs, line => line.Contains("directly from the source", StringComparison.Ordinal));
             Assert.DoesNotContain(vm.Logs, line => line.Contains("Staging ", StringComparison.Ordinal));
+            tabs.SelectedIndex = 0; window.UpdateLayout();
+            ((ComboBox)window.FindName("OutputType")).SelectedValue = OutputFormat.WinRar;
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            window.UpdateLayout();
+            Assert.Equal(OutputFormat.WinRar, vm.Draft.Format);
+            Assert.True(vm.IsWinRar); Assert.False(vm.IsSevenZip);
+            Assert.Equal(Visibility.Visible, ((StackPanel)window.FindName("RarOptions")).Visibility);
+            var method = (ComboBox)window.FindName("RarMethod");
+            Assert.Equal(RarCompressionMethod.Best, method.SelectedItem);
+            method.SelectedItem = RarCompressionMethod.Good;
+            Assert.Equal(RarCompressionMethod.Good, vm.Draft.RarCompression.Method);
+            method.SelectedItem = RarCompressionMethod.Best;
+            vm.Draft.NamingPattern = "ui_rar";
+            Assert.EndsWith(".rar", vm.NamingExample);
+            await Execute(vm.SaveProfile);
+            Assert.False(vm.IsDirty);
+            vm.Draft.RarCompression.Solid = true;
+            Assert.True(vm.IsDirty);
+            vm.Draft.RarCompression.Solid = false;
+            Assert.False(vm.IsDirty);
+            Assert.Equal(RarCompressionMethod.Best, (await store.ReadAsync<BackupProfile[]>("profiles.json"))!.Single(p => p.Id == savedId).RarCompression.Method);
+            if (File.Exists(vm.Settings.RarPath))
+            {
+                vm.Settings.SevenZipPath = "missing-7zip.exe";
+                await Execute(vm.StartBackup);
+                Assert.Empty(vm.Error);
+                Assert.Equal(RunStatus.Completed, vm.History[0].Status);
+                Assert.True(File.Exists(Path.Combine(root, "backups", "ui_rar.rar")));
+            }
+            ((ComboBox)window.FindName("OutputType")).SelectedValue = OutputFormat.Folder;
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            Assert.False(vm.IsWinRar); Assert.False(vm.IsSevenZip);
+            Assert.Equal(Visibility.Collapsed, ((StackPanel)window.FindName("RarOptions")).Visibility);
             vm.InputErrorCount = 1;
             Assert.False(vm.StartBackup.CanExecute(null));
             Assert.False(vm.SaveProfile.CanExecute(null));
