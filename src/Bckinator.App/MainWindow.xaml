@@ -34,18 +34,24 @@
     <TabItem Header="Profile">
      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <StackPanel Margin="4,12,12,12" IsEnabled="{Binding IsIdle}">
-       <TextBlock Text="Profile name" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ProfileName" Text="{Binding Draft.Name, UpdateSourceTrigger=PropertyChanged}" Padding="8"/>
-       <TextBlock Text="Description" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding Draft.Description, UpdateSourceTrigger=PropertyChanged}" Padding="8"/>
-       <TextBlock Text="Source folder" Style="{StaticResource FieldLabel}"/>
-       <DockPanel><Button DockPanel.Dock="Right" Content="Browse…" Command="{Binding BrowseSource}" Margin="8,0,0,0" Padding="12,6"/><TextBox x:Name="SourcePath" Text="{Binding Draft.Source, UpdateSourceTrigger=PropertyChanged}" Padding="8"/></DockPanel>
-       <TextBlock Text="Backup destination" Style="{StaticResource FieldLabel}"/>
-       <DockPanel><Button DockPanel.Dock="Right" Content="Browse…" Command="{Binding BrowseDestination}" Margin="8,0,0,0" Padding="12,6"/><TextBox x:Name="DestinationPath" Text="{Binding Draft.Destination, UpdateSourceTrigger=PropertyChanged}" Padding="8"/></DockPanel>
-       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-        <StackPanel Margin="0,0,8,0"><TextBlock Text="Output type" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="OutputType" ItemsSource="{Binding OutputFormats}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding Draft.Format}" Padding="8"/></StackPanel>
-        <StackPanel Grid.Column="1" Margin="8,0,0,0" Visibility="{Binding IsSevenZip, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Compression preset" Style="{StaticResource FieldLabel}"/><ComboBox ItemsSource="{Binding CompressionPresets}" SelectedItem="{Binding CompressionPreset}" Padding="8"/></StackPanel>
-        <StackPanel Grid.Column="1" Margin="8,0,0,0" Visibility="{Binding IsWinRar, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Compression method" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="RarMethod" ItemsSource="{Binding RarMethods}" SelectedItem="{Binding Draft.RarCompression.Method}" Padding="8"/></StackPanel>
+       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+        <StackPanel Margin="0,0,8,0"><TextBlock Text="Profile name" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ProfileName" Text="{Binding Draft.Name, UpdateSourceTrigger=PropertyChanged}" Padding="8"/></StackPanel>
+        <StackPanel Grid.Column="1" Margin="8,0,0,0"><TextBlock Text="Description" Style="{StaticResource FieldLabel}"/><TextBox x:Name="ProfileDescription" Text="{Binding Draft.Description, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding Draft.Description}" Padding="8"/></StackPanel>
        </Grid>
-       <TextBlock Text="Output name pattern" Style="{StaticResource FieldLabel}"/><TextBox Text="{Binding Draft.NamingPattern, UpdateSourceTrigger=PropertyChanged}" Padding="8"/>
+       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+        <StackPanel Margin="0,0,8,0"><TextBlock Text="Source folder" Style="{StaticResource FieldLabel}"/>
+         <DockPanel><Button DockPanel.Dock="Right" Content="Browse…" Command="{Binding BrowseSource}" Margin="8,0,0,0" Padding="12,6"/><TextBox x:Name="SourcePath" Text="{Binding Draft.Source, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding Draft.Source}" Padding="8"/></DockPanel>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Margin="8,0,0,0"><TextBlock Text="Backup destination" Style="{StaticResource FieldLabel}"/>
+         <DockPanel><Button DockPanel.Dock="Right" Content="Browse…" Command="{Binding BrowseDestination}" Margin="8,0,0,0" Padding="12,6"/><TextBox x:Name="DestinationPath" Text="{Binding Draft.Destination, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding Draft.Destination}" Padding="8"/></DockPanel>
+        </StackPanel>
+       </Grid>
+       <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition Width="1.8*"/></Grid.ColumnDefinitions>
+        <StackPanel Margin="0,0,8,0"><TextBlock Text="Output type" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="OutputType" ItemsSource="{Binding OutputFormats}" DisplayMemberPath="Value" SelectedValuePath="Key" SelectedValue="{Binding Draft.Format}" Padding="8"/></StackPanel>
+        <StackPanel Grid.Column="1" Margin="8,0,8,0" Visibility="{Binding IsSevenZip, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Compression preset" Style="{StaticResource FieldLabel}"/><ComboBox ItemsSource="{Binding CompressionPresets}" SelectedItem="{Binding CompressionPreset}" Padding="8"/></StackPanel>
+        <StackPanel Grid.Column="1" Margin="8,0,8,0" Visibility="{Binding IsWinRar, Converter={StaticResource BoolVisibility}}"><TextBlock Text="Compression method" Style="{StaticResource FieldLabel}"/><ComboBox x:Name="RarMethod" ItemsSource="{Binding RarMethods}" SelectedItem="{Binding Draft.RarCompression.Method}" Padding="8"/></StackPanel>
+        <StackPanel Grid.Column="2" Margin="8,0,0,0"><TextBlock Text="Output name pattern" Style="{StaticResource FieldLabel}"/><TextBox x:Name="OutputNamePattern" Text="{Binding Draft.NamingPattern, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding Draft.NamingPattern}" Padding="8"/></StackPanel>
+       </Grid>
        <TextBlock Text="{Binding NamingExample, StringFormat='Example: {0}'}" Opacity="0.65" Margin="0,6,0,0" TextWrapping="Wrap"/>
        <TextBlock Text="Use .NET date/time placeholders, e.g. backup_{yyyyMMdd_HHmmss}. Archives contain a root folder with the generated name." Opacity="0.65" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,12"/>
        <Expander Header="Advanced compression · LZMA2" Visibility="{Binding IsSevenZip, Converter={StaticResource BoolVisibility}}">
